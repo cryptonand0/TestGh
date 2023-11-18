@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Ejercicio semana 2 
+# Aumentar la tarifa utilizando los mecanismos de 
+# Replace-By-Fee (RBF) y 
+# Child-Pays-for-Parent (CPFP) 
+
+
+#Colours
+greenC="\e[0;32m\033[1m"
+endC="\033[0m\e[0m"
+redC="\e[0;31m\033[1m"
+blueC="\e[0;34m\033[1m"
+yellowC="\e[0;33m\033[1m"
+purpleC="\e[0;35m\033[1m"
+turquoiseC="\e[0;36m\033[1m"
+grayC="\e[0;37m\033[1m"
+
+functionClean(){
+   clear
+   sleep 1 
+   echo -e "${blueC}[!] ${endC}${yellowC}Stopping Bitcoin Core${endC}"
+   bitcoin-cli stop > /dev/null 
+   rm -r -f ~/.bitcoin/regtest/
+   sleep 5
+}
+
+functionStart(){
+   echo -e "${blueC}[+] ${endC}${grayC}Restarting Bitcoin Core${endC}"
+   bitcoind -daemon
+   echo -e "\t\t\t\t\t\t${blueC}$(bitcoind --version | grep version)${endC}"
+   sleep 3
+   echo -e "${blueC}[+] ${endC}${grayC}Blockchain: ${endC}${greenC}\t\t\t\t$(bitcoin-cli getblockchaininfo | jq -r .chain ) ${endC}"
+ }
+#
+# ---------------------------------------------
+# Crear dos billeteras llamadas Miner y Trader.
+# ---------------------------------------------
+#
+functionCreaWallet(){
+   echo -e "${blueC}[+] ${endC}${grayC}Creando wallets Miner y Trader... ${endC}"
+   bitcoin-cli -named createwallet wallet_name="Miner" descriptors=true > /dev/null
+   bitcoin-cli -named createwallet wallet_name="Trader" descriptors=true > /dev/null
+}
+
+fuctionNewAddress(){
+   walletAddressMiner=$(bitcoin-cli -rpcwallet=Miner getnewaddress "Wallet recompensa de mineria")
+   walletAddressMinerCambio=$(bitcoin-cli -rpcwallet=Miner getnewaddress "Wallet cambio")
+   walletAddressTrader=$(bitcoin-cli -rpcwallet=Trader getnewaddress "Wallet del trader")
+
+
+   echo -e "${blueC}[+] ${endC}${grayC}Nueva Wallet Miner: \t\t\t${endC}${greenC}$walletAddressMiner ${endC}"
+   echo -e "${blueC}[+] ${endC}${grayC}Wallet cambio:      \t\t\t${endC}${greenC}$walletAddressMinerCambio ${endC}"
+   echo -e "${blueC}[+] ${endC}${grayC}Nueva Wallet Trader: \t\t\t${endC}${greenC}$walletAddressTrader ${endC}"
+}
+
+
+functionMining(){
+   echo -e "\n${blueC}[+] ${endC}${grayC}Altura de bloque: \t\t\t\t${endC}${greenC}$(bitcoin-cli getblockchaininfo | grep "blocks" | awk '{print $2}' | tr ',' ' ')${endC}"
+   echo -e "${blueC}[+] ${endC}${grayC}Balance: \t\t\t\t\t${endC}${greenC}$(bitcoin-cli -rpcwallet=Miner getbalance | bc)${endC}"
+   echo -e "${blueC}[+] ${endC}${yellowC}Minando bloques...${endC}"
+
+   bitcoin-cli generatetoaddress 103 ${walletAddressMiner} > /dev/null
+
+   echo -e "${blueC}[+] ${endC}${grayC}Altura de bloque: \t\t\t\t${endC}${greenC}$(bitcoin-cli getblockchaininfo | grep blocks | awk '{print $2}' | tr ',' ' ')${endC}"
+   echo -e "${blueC}[+] ${endC}${grayC}Balance: \t\t\t\t\t${endC}${greenC}$(bitcoin-cli -rpcwallet=Miner getbalance | bc)${endC}"
+
+}
+
+
+functionListUnspent(){
+
+  listaUnspentMiner=$(bitcoin-cli -rpcwallet=Miner listunspent)
+
+  listaTxidMiner0=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[0] | .txid')
+  listaTxidMiner1=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[1] | .txid')
+  listaTxidMiner2=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[2] | .txid')
+
+  listaVoutMiner0=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[0] | .vout')
+  listaVoutMiner1=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[1] | .vout')
+  listaVoutMiner2=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[2] | .vout')
+
+  listaAmountMiner0=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[0] | .amount')
+  listaAmountMiner1=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[1] | .amount')
+  listaAmountMiner2=$(bitcoin-cli -rpcwallet=Miner listunspent | jq -r '.[2] | .amount')
+
+  echo -e "\n${blueC}[+] ${endC}${grayC}Listando [3] transacciones no gastadas del minero: ${endC}"
+  echo -e "${yellowC}$listaUnspentMiner${endC}"
+  echo -e "\n${blueC}[+] ${endC}${grayC}Listando txid, vout y balance: ${endC}"
+  echo -e "$listaTxidMiner0 $listaVoutMiner0 $listaAmountMiner0"
+  echo -e "$listaTxidMiner1 $listaVoutMiner1 $listaAmountMiner1"
+  echo -e "$listaTxidMiner2 $listaVoutMiner2 $listaAmountMiner2"
+}
+
+functionTxCruda(){
+   echo -e "\n${blueC}[+] ${endC}${grayC}Comprobando las variables para la transaccion: ${endC}"
+   echo -e " -> Utxo Txid : \t\t$listaTxidMiner0 "
+   echo -e " -> Utxo Vout : \t\t$listaVoutMiner0 "
+   echo -e " -> Utxo Balance:\t\t$listaAmountMiner0 "
+   echo -e " -> Utxo Txid : \t\t$listaTxidMiner1 "
+   echo -e " -> Utxo Vout : \t\t$listaVoutMiner1 "
+   echo -e " -> Utxo Balance:\t\t$listaAmountMiner1 "
+   echo -e " -> Address Miner cambio: \t$walletAddressMinerCambio"
+   echo -e " -> Address Trader: \t\t$walletAddressTrader"
+
+   rawTxHex=$(bitcoin-cli -named createrawtransaction inputs='''[ { "txid": "'$listaTxidMiner0'", "vout": '$listaVoutMiner0', "sequence":1 }, { "txid": "'$listaTxidMiner1'", "vout": '$listaVoutMiner1', "sequence":1 } ]''' outputs='''[{ "'$walletAddressTrader'": 70 },{"'$walletAddressMinerCambio'": 29.99999}]''')
+   rawTxDec=$(bitcoin-cli decoderawtransaction $rawTxHex)
+   txParentFirmada=$(bitcoin-cli -rpcwallet=Miner signrawtransactionwithwallet $rawTxDec | jq -r '.hex')
+   txidParent=$(bitcoin-cli sendrawtransaction $txParentFirmada )
+   listaUnspentMiner=$(bitcoin-cli -rpcwallet=Miner listunspent)
+
+   echo -e "\n${blueC}[+] ${endC}${grayC}Listando transaccion Exadecimal en crudo: ${endC}"
+   echo -e "\n${blueC}$rawTxHex${endC}"
+
+   echo -e "\n${blueC}[+] ${endC}${grayC}Listando transaccion decodificada: ${endC}"
+   echo -e "\n${yellowC}$rawTxDec${endC}"
+
+   echo -e "\n${blueC}[+] ${endC}${grayC}Listando transaccion decodificada Firmada: ${endC}"
+   echo -e "\n${blueC}$txParentFirmada${endC}"
+
+   echo -e "\n${blueC}[+] ${endC}${grayC}Listando ID de la transaccion: ${endC}"
+   echo -e "\n${blueC}$txidParent${endC}"
+
+   echo -e "\n${blueC}[+] ${endC}${grayC}Listando transaccion en la wallet del miner todavia no enviada: ${endC}"
+   echo -e "\n${blueC}$listaUnspentMiner${endC}"
+   
+   echo -e "\n${blueC}[+] ${endC}${grayC} Estado de la transaccion en la Mempool: ${endC}"
+   mempoolTx=$(bitcoin-cli getmempoolentry $txidParent | jq -r .unbroadcast )
+
+   echo "fin por ahora"
+}
+
+functionClean
+functionStart
+functionCreaWallet
+fuctionNewAddress
+functionMining
+functionListUnspent
+functionTxCruda
